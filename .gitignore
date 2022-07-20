@@ -2,3 +2,4 @@
 *.txt
 *.bak
 *.png
+tmp/
