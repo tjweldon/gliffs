@@ -24,6 +24,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/alexflint/go-arg"
 	"github.com/golang/freetype"
@@ -31,59 +32,54 @@ import (
 	"golang.org/x/image/font"
 )
 
-
-var text = []string{
-	"’Twas brillig",//, and the slithy toves",
-	//"Did gyre and gimble in the wabe;",
-	//"All mimsy were the borogoves,",
-	//"And the mome raths outgrabe.",
-	//"",
-	//"“Beware the Jabberwock, my son!",
-	//"The jaws that bite, the claws that catch!",
-	//"Beware the Jubjub bird, and shun",
-	//"The frumious Bandersnatch!”",
-	//"",
-	//"He took his vorpal sword in hand:",
-	//"Long time the manxome foe he sought—",
-	//"So rested he by the Tumtum tree,",
-	//"And stood awhile in thought.",
-	//"",
-	//"And as in uffish thought he stood,",
-	//"The Jabberwock, with eyes of flame,",
-	//"Came whiffling through the tulgey wood,",
-	//"And burbled as it came!",
-	//"",
-	//"One, two! One, two! and through and through",
-	//"The vorpal blade went snicker-snack!",
-	//"He left it dead, and with its head",
-	//"He went galumphing back.",
-	//"",
-	//"“And hast thou slain the Jabberwock?",
-	//"Come to my arms, my beamish boy!",
-	//"O frabjous day! Callooh! Callay!”",
-	//"He chortled in his joy.",
-	//"",
-	//"’Twas brillig, and the slithy toves",
-	//"Did gyre and gimble in the wabe;",
-	//"All mimsy were the borogoves,",
-	//"And the mome raths outgrabe.",
-}
+var text = strings.Join([]string{
+	"’Twas brillig, and the slithy toves",
+	"Did gyre and gimble in the wabe;",
+	"All mimsy were the borogoves,",
+	"And the mome raths outgrabe.",
+	"“Beware the Jabberwock, my son!",
+	"The jaws that bite, the claws that catch!",
+	"Beware the Jubjub bird, and shun",
+	"The frumious Bandersnatch!”",
+	"He took his vorpal sword in hand:",
+	"Long time the manxome foe he sought—",
+	"So rested he by the Tumtum tree,",
+	"And stood awhile in thought.",
+	"And as in uffish thought he stood,",
+	"The Jabberwock, with eyes of flame,",
+	"Came whiffling through the tulgey wood,",
+	"And burbled as it came!",
+	"One, two! One, two! and through and through",
+	"The vorpal blade went snicker-snack!",
+	"He left it dead, and with its head",
+	"He went galumphing back.",
+	"“And hast thou slain the Jabberwock?",
+	"Come to my arms, my beamish boy!",
+	"O frabjous day! Callooh! Callay!”",
+	"He chortled in his joy.",
+	"’Twas brillig, and the slithy toves",
+	"Did gyre and gimble in the wabe;",
+	"All mimsy were the borogoves,",
+	"And the mome raths outgrabe.",
+}, " ")
 
 var (
-	dpi      = flag.Float64("dpi", 144, "screen resolution in Dots Per Inch")
+	dpi      = flag.Float64("dpi", 72, "screen resolution in Dots Per Inch")
 	fontfile = flag.String("fontfile", "./sample.ttf", "filename of the ttf font")
-	hinting  = flag.String("hinting", "none", "none | full")
-	size     = flag.Float64("size", 18, "font size in points")
+	hinting  = flag.String("hinting", "full", "none | full")
 	spacing  = flag.Float64("spacing", 1.5, "line spacing (e.g. 2 means double spaced)")
-	wonb     = flag.Bool("whiteonblack", true, "white text on a black background")
 )
 
 type Cli struct {
-	Dpi float64 `arg:"--dpi" default:"72" help:"screen resolution in Dots Per Inch"`
-	Pts float64 `arg:"--pts" help:"The font size in pts" default:"20"`
-	Height int `arg:"--height" help:"The height of the image in pixels" default:"100"`
-	Width int `arg:"--width" help:"The width of the image in pixels" default:"100"`
+	Dpi    float64 `arg:"--dpi" default:"72" help:"screen resolution in Dots Per Inch"`
+	Pts    float64 `arg:"--pts" help:"The font size in pts" default:"20"`
+	Height int     `arg:"--height" help:"The height of the image in pixels" default:"0"`
+	Width  int     `arg:"--width" help:"The width of the image in pixels" default:"0"`
+	Light  bool    `arg:"--light" help:"Run in light mode" default:"false"`
 }
+
+func (c Cli) GetDims() (w, h int) { return c.Width, c.Height }
+func (c Cli) GetLightMode() bool  { return c.Light }
 
 var args = func() Cli {
 	a := &Cli{}
@@ -101,105 +97,181 @@ func NewCtx(f *truetype.Font, whiteOnBlack bool, rgba draw.Image) (ctx *freetype
 	ctx = freetype.NewContext()
 	ctx.SetDPI(*dpi)
 	ctx.SetFont(f)
-	ctx.SetFontSize(*size)
+	ctx.SetFontSize(args.Pts)
 	ctx.SetClip(rgba.Bounds())
 	ctx.SetDst(rgba)
 	ctx.SetSrc(fg)
+	ctx.SetHinting(font.HintingFull)
 	return ctx
 }
 
-func main() {
-	//flag.Parse()
-	
-	// Cli overrides, otherwise default value
-	*size = args.Pts
+type TypeFace struct {
+	Font *truetype.Font
+	Face font.Face
+}
 
-	// Read the font data.
-	fontBytes, err := ioutil.ReadFile(*fontfile)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	f, err := freetype.ParseFont(fontBytes)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	*wonb = true	
-	
-	// create the rgba image
-	rgba := image.NewRGBA(image.Rect(0, 0, 0, 0))
-	
-	// Initialise the ctx.
-	ctx := NewCtx(f, *wonb, rgba)
-	
-	switch *hinting {
-	default:
-		ctx.SetHinting(font.HintingNone)
-	case "full":
-		ctx.SetHinting(font.HintingFull)
-	}
-
-	// draw the text by:
-	// setting the position 
-	pt := freetype.Pt(10, 10+int(ctx.PointToFixed(*size)>>6))
-	
-	inlineText := strings.Join(text, "")
-
-	wordGenerator := func(out chan<- string, il string) {
+func GenWords(text string) <-chan string {
+	work := func(out chan<- string, txt string) {
 		defer close(out)
-		var word string
 		for found := true; found; {
-			found = len(il) > 0
-			if ! found { break }
-			word, il = string(il[:1]), string(il[1:])
-			fmt.Println(word, il)
-
-			out <- word
+			var word, rest string
+			word, rest, found = strings.Cut(txt, " ")
+			txt = string(rest)
+			out <- string(word)
 		}
 	}
 
-	words := make(chan string)
-	go wordGenerator(words, inlineText)
-	i := 0
-	for word := range words {
-		wordImg := image.NewRGBA(image.Rect(0, 0, args.Width, args.Height))
-		wordCtx := NewCtx(f, *wonb, wordImg)
-		_, err = wordCtx.DrawString(word, pt)
-		
-		sp2 := image.Point{rgba.Bounds().Dx(), 0}
-		fmt.Println(sp2)
+	res := make(chan string)
+	go work(res, text)
+	return res
+}
 
-		r2 := image.Rectangle{sp2, sp2.Add(wordImg.Bounds().Size())}
-		r := image.Rectangle{image.Point{}, r2.Max}
-		
-		tmp := image.NewRGBA(r)
-		
-		draw.Draw(tmp, rgba.Bounds(), rgba, image.Point{}, draw.Src)
-		draw.Draw(tmp, r2, wordImg, sp2, draw.Src)
-
-		*rgba = *tmp
-		fmt.Println(rgba.Bounds())
-		i ++
-	}
-
-	// and then using the configured context, write the string in the font.
-	//_, err = ctx.DrawString(inlineText, pt)
-	
-	// Save that RGBA image to disk.
-	outFile, err := os.Create("out.png")
+func main() {
+	typeface, err := LoadFont(*fontfile, args.Pts)
 	if err != nil {
 		log.Fatal(err)
+	}
+	if args.Height == 0 {
+		args.Height = int(typeface.Face.Metrics().Height)>>6 + int(typeface.Face.Metrics().Descent)>>6
+	}
+	if args.Width == 0 {
+		w, ok := typeface.Face.GlyphAdvance('$')
+		if !ok {
+			log.Fatal("Could not get glyph width")
+		}
+		args.Width = int(w) >> 6
+	}
+	words := GenWords(text)
+
+	results := GenImages(words, args, args, typeface, args.Pts)
+	for img := range results {
+		if err := SaveImg(img, "out.png"); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+type HasDims interface {
+	GetDims() (w, h int)
+}
+
+type HasLightMode interface {
+	GetLightMode() bool
+}
+
+func LoadFont(path string, size float64) (typeface *TypeFace, err error) {
+	// everything is declared at this point, so returning if
+	// err != nil will return nil, err
+	var fontBytes []byte
+
+	// Read the font data.
+	fontBytes, err = ioutil.ReadFile(*fontfile)
+	if err != nil {
+		return
+	}
+
+	// then parse it
+	f, err := freetype.ParseFont(fontBytes)
+	if err != nil {
+		return
+	}
+
+	face := truetype.NewFace(f, &truetype.Options{Size: size})
+
+	return &TypeFace{Font: f, Face: face}, nil
+}
+
+func LefToRightConcat(imgs ...draw.Image) (concat draw.Image, err error) {
+	if len(imgs) == 0 {
+		return nil, fmt.Errorf("LefToRightConcat: Must supply at least one image")
+	}
+	cellWidth := imgs[0].Bounds().Dx()
+
+	width := 0
+	for _, nxt := range imgs {
+		width += nxt.Bounds().Dx()
+	}
+	concat = image.NewRGBA(
+		image.Rectangle{
+			image.Point{0, 0},
+			image.Point{
+				width,
+				imgs[0].Bounds().Dy(),
+			},
+		},
+	)
+
+	for i, nxt := range imgs {
+		draw.Draw(
+			concat,
+			nxt.Bounds().Bounds().Add(image.Point{i * cellWidth, 0}),
+			nxt,
+			image.Point{0, 0},
+			draw.Src,
+		)
+	}
+
+	return
+}
+
+func GenImages(text <-chan string, dims HasDims, light HasLightMode, typeface *TypeFace, pts float64) <-chan image.Image {
+	wonb := !light.GetLightMode()
+	work := func(res chan<- image.Image, txt <-chan string, dark bool) {
+		defer close(res)
+		imgs := []draw.Image{}
+		for x := range text {
+			for _, glyph := range x {
+				// create the rgba image
+				glyphImg := image.NewRGBA(image.Rect(0, 0, args.Width, args.Height))
+
+				// Initialise the ctx.
+				ctx := NewCtx(typeface.Font, dark, glyphImg)
+				m := typeface.Face.Metrics()
+				pixelHeight := int(m.Height) >> 6
+				
+				// set the positioning
+				pt := freetype.Pt(0, pixelHeight)
+				
+				// draw
+				ctx.DrawString(string(glyph), pt)
+				imgs = append(imgs, glyphImg)
+			}
+			// concatenate the images and...
+			concat, err := LefToRightConcat(imgs...)
+			if err != nil {
+				log.Fatal(err)
+			}
+			// send concat!
+			res <- concat
+			imgs = []draw.Image{}
+			time.Sleep(200 * time.Millisecond)
+		}
+		
+
+	}
+
+	out := make(chan image.Image)
+	go work(out, text, wonb)
+
+	return out
+}
+
+func SaveImg(rgba image.Image, path string) error {
+	outFile, err := os.Create(path)
+	if err != nil {
+		return err
 	}
 	defer outFile.Close()
 	b := bufio.NewWriter(outFile)
 	err = png.Encode(b, rgba)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	err = b.Flush()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	log.Println("Wrote out.png OK.")
+
+	return nil
 }
